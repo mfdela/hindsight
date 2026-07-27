@@ -1,0 +1,53 @@
+# Docker Compose file for Hindsight against a PostgreSQL instance you already run
+# yourself (e.g. an existing `postgres` container with pgvector installed), instead
+# of the embedded pg0 or a Postgres container managed by compose.
+#
+# Prerequisites:
+# - A running Postgres reachable from this container, with a dedicated non-superuser
+#   role owning a database for Hindsight, and the `vector` extension already
+#   installed in that database by a superuser (see README.md in this folder for the
+#   one-time setup commands). Hindsight's migrations run
+#   `CREATE EXTENSION IF NOT EXISTS vector`, which is a permission-free no-op once
+#   the extension is already installed -- so the app role never needs
+#   extension-creation (superuser-equivalent) privileges.
+# - If your Postgres runs in Docker, this compose file must join the same Docker
+#   network so the hostname in HINDSIGHT_API_DATABASE_URL resolves. Set
+#   POSTGRES_NETWORK below to that network's name (`docker network ls`).
+#
+# Required environment variables:
+# - HINDSIGHT_API_DATABASE_URL: full connection string to your existing Postgres,
+#   using a non-superuser role that owns the target database, e.g.
+#   postgresql://hindsight_user:yourpassword@postgres:5432/hindsight
+#   (use the Postgres container's name as the host when sharing a Docker network)
+# - HINDSIGHT_API_LLM_API_KEY: API key for the configured LLM provider
+#
+# Optional environment variables with defaults:
+# - HINDSIGHT_VERSION: Hindsight application version (default: latest)
+# - HINDSIGHT_API_LLM_PROVIDER: LLM provider (default: anthropic)
+# - HINDSIGHT_API_LLM_MODEL: LLM model (default: claude-sonnet-4-20250514)
+# - POSTGRES_NETWORK: external Docker network your Postgres container is on
+#   (default: internal)
+#
+# Usage:
+#   docker compose -f docker/docker-compose/existing-pg/docker-compose.yaml up -d
+
+services:
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:${HINDSIGHT_VERSION:-latest}
+    container_name: hindsight-app
+    ports:
+      - "8888:8888"
+      - "9999:9999"
+    environment:
+      - HINDSIGHT_API_DATABASE_URL=${HINDSIGHT_API_DATABASE_URL:?Please set the HINDSIGHT_API_DATABASE_URL env variable}
+      - HINDSIGHT_API_LLM_PROVIDER=${HINDSIGHT_API_LLM_PROVIDER:-anthropic}
+      - HINDSIGHT_API_LLM_API_KEY=${HINDSIGHT_API_LLM_API_KEY:?Please set the HINDSIGHT_API_LLM_API_KEY env variable}
+      - HINDSIGHT_API_LLM_MODEL=${HINDSIGHT_API_LLM_MODEL:-claude-sonnet-4-20250514}
+      - HINDSIGHT_API_WORKER_ID=${HINDSIGHT_API_WORKER_ID:-hindsight-app}
+    networks:
+      - postgres-net
+
+networks:
+  postgres-net:
+    name: ${POSTGRES_NETWORK:-internal}
+    external: true
